@@ -21,22 +21,18 @@ import (
 	"container/list"
 	"crypto/rand"
 	"encoding/base64"
-//	"errors"
+	"errors"
 	"fmt"
-//	"io"
-//	"log"
 	"net/http"
-//	"net/textproto"
 	"net/url"
-//	"os"
 	"sync"
 	"time"
 )
 
 // Manager define the session config
 type Manager struct {
-	CookieName              string `json:"cookieName"`
-	EnableSetCookie         bool   `json:"enableSetCookie,omitempty"`
+	CookieName              string
+	EnableSetCookie         bool
 	Gclifetime              time.Duration
 	Maxlifetime             time.Duration
 	DisableHTTPOnly         bool   // disable HTTPOnly
@@ -227,7 +223,7 @@ func (manager *Manager) sessionID() (string, error) {
 	b := make([]byte, manager.SessionIDLength)
 	n, err := rand.Read(b)
 	if n != len(b) || err != nil {
-		return "", fmt.Errorf("Could not successfully read from the system CSPRNG")
+		return "", errors.New("Could not successfully read from the system CSPRNG")
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
 }
@@ -243,7 +239,6 @@ func (pder *Manager) sessionRead(sid string) (Store, error) {
 	}
 	pder.lock.RUnlock()
 	pder.lock.Lock()
-//	newsess := &MemSessionStore{sid: sid, timeAccessed: time.Now(), value: make(map[string]interface{})}
 	newsess := newMemSessionStore(sid)
 	element := pder.list.PushFront(newsess)
 	pder.sessions[sid] = element
@@ -276,7 +271,6 @@ func (pder *Manager) sessionRegenerate(oldsid, sid string) (Store, error) {
 	}
 	pder.lock.RUnlock()
 	pder.lock.Lock()
-//	newsess := &MemSessionStore{sid: sid, timeAccessed: time.Now(), value: make(map[string]interface{})}
 	newsess := newMemSessionStore(sid)
 	element := pder.list.PushFront(newsess)
 	pder.sessions[sid] = element
@@ -330,7 +324,6 @@ func (pder *Manager) SessionForceGC() {
 		if element == nil {
 			break
 		}
-//		if (element.Value.(*MemSessionStore).timeAccessed.Unix() + pder.maxlifetime) < time.Now().Unix() {
 		if element.Value.(*MemSessionStore).timeAccessed.Add(pder.Maxlifetime).After(time.Now()) {
 			pder.lock.RUnlock()
 			pder.lock.Lock()
@@ -362,7 +355,7 @@ func (pder *Manager) sessionUpdate(sid string) error {
 	return nil
 }
 
-// for plugin
+// Session for plugin
 type Session interface {
 	Start(w http.ResponseWriter, r *http.Request) (session Store, err error)
 	Destroy(w http.ResponseWriter, r *http.Request)
@@ -371,8 +364,7 @@ type Session interface {
 
 type PluginSession struct {
 	mng             *Manager
-	plugTag         string
-//	mainsess        *PluginSession
+	plugTag         string   // main system = "/"
 }
 
 func (sess *PluginSession) Start(w http.ResponseWriter, r *http.Request) (Store, error) {
@@ -441,9 +433,8 @@ type MemSessionStore struct {
 	sid          string                      //session id
 	timeAccessed time.Time                   //last access time
 	value        map[string]interface{} //session store
-//	sess         *PluginSession
-	mainstore    Store
-	base         Store
+	mainstore    Store  // point to system session store
+	base         Store  // point to root store
 	lock         sync.RWMutex
 }
 
