@@ -11,9 +11,14 @@ import (
 var VERSION = "1.0.1"
 var PLIGIN_NAME = "demo"
 
-func OnLoad( plugin_name, plugin_base_path string, sess web.Session, mux *web.Mux ) (hand http.Handler, err error) {
+var l *web.Log
+
+func OnLoad( plugin_name, plugin_base_path string, sess web.Session, mux *web.Mux, logger *web.Log ) (hand http.Handler, err error) {
 
 	fmt.Println("[onLoad]", PLIGIN_NAME, plugin_name, plugin_base_path)
+
+	l = logger
+	l.Vln(2, "[onLoad]", PLIGIN_NAME, plugin_name, plugin_base_path)
 
 	mux.Handle("/res/", mux.StripPrefix("/res", http.FileServer(http.Dir(plugin_base_path + "/res"))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -37,6 +42,7 @@ func OnLoad( plugin_name, plugin_base_path string, sess web.Session, mux *web.Mu
 
 func OnStop( cleanup bool ) (ok bool, err error) {
 	fmt.Println("[OnStop]", PLIGIN_NAME, cleanup)
+	l.Vln(2, "[OnStop]", PLIGIN_NAME, cleanup)
 	return true, nil
 }
 

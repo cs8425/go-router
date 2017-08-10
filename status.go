@@ -1,15 +1,24 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
 	"runtime"
+	"expvar"
+
+	"./lib/web"
 )
 
 type GoStats struct {
 	NumCPU        int
 	NumGoroutine  int
 	NumCgoCall    int64
+
+	MemTotal      int
+	MemUsed       int // = MemTotal- (MemCached + MemBuffers + MemFree)
+	MemFree       int
+	MemBuffers    int
+	MemCached     int
+	SwapTotal     int
+	SwapFree      int
 
 	memStats      runtime.MemStats
 
@@ -25,7 +34,7 @@ type GoStats struct {
 
 var status GoStats
 
-func GetGoStats() (GoStats) {
+func GetGoStats() (interface{}) {
 	runtime.ReadMemStats(&status.memStats)
 
 	status.NumCPU = runtime.NumCPU()
@@ -43,33 +52,12 @@ func GetGoStats() (GoStats) {
 	return status
 }
 
-func goStatsHandler(w http.ResponseWriter, r *http.Request) {
-//	fmt.Fprintf(w, "this page need login! %s\n", r.URL.Path)
-
-	st := GetGoStats()
-
-	switch r.Method {
-	case "GET":
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(st)
-	case "POST":
-		http.Error(w, "Not yet!", 501)
-	default:
-		http.Error(w, "Method Not Allowed", 405)
-	}
+func init() {
+	expvar.Publish("status", expvar.Func(GetGoStats))
 }
 
-func goStatsJSONHandler(w http.ResponseWriter, r *http.Request) {
-	st := GetGoStats()
-
-	switch r.Method {
-	case "GET":
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(st)
-	default:
-		http.Error(w, "Method Not Allowed", 405)
-	}
+func RegStatsHandler( sess web.Session, mux *web.Mux ) {
+	mux.Handle("/status", expvar.Handler())
+//	mux.HandleAuth("/status", expvar.Handler())
 }
-
-
 

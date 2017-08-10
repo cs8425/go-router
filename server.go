@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"flag"
 	"io/ioutil"
-	"log"
+//	"log"
 	"net"
 	"os"
 	"path"
@@ -12,17 +12,15 @@ import (
 //	"time"
 	"errors"
 
-	"fmt"
-
 	"plugin"
 
 	"./lib/web"
 	"./lib/tool"
 )
 
-var conf = flag.String("c", "server.json", "config file")
+var conf = flag.String("c", "config.json", "config file")
 var bind = flag.String("l", ":8080", "bind port")
-var verb = flag.Int("v", 2, "log verbosity")
+var verb = flag.Int("v", 6, "log verbosity")
 
 var (
 	// VERSION is injected by buildflags
@@ -33,21 +31,35 @@ var (
 type plug struct {
 	PluginName  *string
 	Version     *string
-	loadFunc    func( string, string, web.Session, *web.Mux ) ( http.Handler, error )
+	loadFunc    func( string, string, web.Session, *web.Mux, *web.Log ) ( http.Handler, error )
 	stopFunc    func( bool ) ( bool, error )
+	logger      *web.Log
 	mx          sync.Mutex
 }
 
 func main() {
-	if VERSION == "DEBUG" {
+/*	if VERSION == "DEBUG" {
 		tool.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	}
+	}*/
 	flag.Parse()
 
-	tool.Verbosity = *verb
+	err := parseJSONConfig(&config, *conf)
+	if err != nil {
+		tool.Vln(1, "parse JSON Config error:", err)
+		return
+	}
+	tool.Vln(2, "conf:", config)
+
+	err = parseUserJSON(config.UserDB)
+	if err != nil {
+		tool.Vln(1, "parse User DB error:", err)
+		return
+	}
+
+	tool.Verbosity = config.Verb
 	tool.Vln(2, "version:", VERSION)
 
-	lis, err := net.Listen("tcp", *bind)
+	lis, err := net.Listen("tcp", config.Listen)
 	if err != nil {
 		tool.Vln(2, "Error listening:", err.Error())
 		os.Exit(1)
@@ -69,18 +81,22 @@ func main() {
 	tool.Vln(2, "root mux:", mux)
 	tool.Vln(2, "root api mux:", muxapi)
 
+	// static file
+	mux.Handle("/res/", mux.StripPrefix("/res", http.FileServer(http.Dir("res"))))
+
+	// registering status
+	RegStatsHandler(mainsess, muxapi)
+
+	// registering power control
+	mux.HandleFuncAuth(mainsess, "/power", powerHandler)
+
+	// registering login control
+	RegUserHandler(mainsess, mux)
+
+
+/*
 	rh := http.RedirectHandler("http://example.org", 307)
 	mux.Handle("/foo", rh)
-
-//	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
-/*	mux.HandleFuncAuth(mainsess, "/status", func(w http.ResponseWriter, r *http.Request) {
-		store, _ := mainsess.Start(w, r)
-		fmt.Fprintf(w, "this page need login! %s\n", r.URL.Path)
-		fmt.Fprintf(w, "Session isLogin = %v\n", store.IsLogin())
-	})*/
-//	mux.HandleFuncAuth(mainsess, "/status", goStatsHandler)
-	mux.HandleFunc("/status", goStatsHandler)
-	muxapi.HandleFunc("/status", goStatsJSONHandler)
 
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		store, err := mainsess.Start(w, r)
@@ -90,7 +106,7 @@ func main() {
 		store.Set("isLogin", true)
 		fmt.Fprintf(w, "Welcome to the login page! %s\n", r.URL.Path)
 		fmt.Fprintf(w, "Session isLogin = %v\n", store.IsLogin())
-	})
+	})*/
 
 	loaded := make([]*plug, 0)
 	plugins, _ := ioutil.ReadDir("plugins/")
@@ -109,7 +125,14 @@ func main() {
 		urlbase := "/" + pname + "/"
 		plugsess, _ := sess.NewPlugin(*lib.PluginName + "-v" + *lib.Version + "@" + pname)
 		plugmux := web.NewMux(urlbase)
-		hand, err := lib.loadFunc(pname, pbase, plugsess, plugmux)
+		pluglog, err := web.NewPluginLogger(pname, 2)
+		if err != nil{
+			tool.Vln(2, "[load-plugin][create log]err", pname, err)
+			pluglog = web.Default
+		}
+		lib.logger = pluglog
+
+		hand, err := lib.loadFunc(pname, pbase, plugsess, plugmux, pluglog)
 		if err != nil {
 			tool.Vln(2, "[load-plugin][Load]err", pname, err)
 			continue
@@ -162,7 +185,7 @@ func loadPlugin(pname, pbase string) (*plug, error) {
 		tool.Vln(2, "[load-plugin][OnLoad]Lookup err", pname, err)
 		return nil, err
 	}
-	loadImpl, ok := load.(func( string, string, web.Session, *web.Mux ) ( http.Handler, error ))
+	loadImpl, ok := load.(func( string, string, web.Session, *web.Mux, *web.Log ) ( http.Handler, error ))
 	if !ok {
 		tool.Vln(2, "[load-plugin][OnLoad]wrong type", pname)
 		return nil, errType

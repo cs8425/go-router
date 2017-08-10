@@ -22,7 +22,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"fmt"
+//	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -298,9 +298,9 @@ func (pder *Manager) SessionGC() {
 	for {
 		select {
 		case <-tick.C:
-			fmt.Println("[SessionForceGC]start", pder.sessionAll())
+//			fmt.Println("[SessionForceGC]start", pder.sessionAll())
 			pder.SessionForceGC()
-			fmt.Println("[SessionForceGC]end", pder.sessionAll())
+//			fmt.Println("[SessionForceGC]end", pder.sessionAll())
 		case <-pder.end:
 			return
 		}
@@ -395,7 +395,7 @@ func (sess *PluginSession) getPlugin(basestore Store, err error) (Store, error) 
 	if sess.plugTag != "/" {
 		mainstore, ok := basestore.Get("/")
 		if !ok {
-			fmt.Println("[new main session]", sess.plugTag, basestore.SessionID())
+//			fmt.Println("[new main session]", sess.plugTag, basestore.SessionID())
 			mainstore = newMemSessionStore(basestore.SessionID())
 			mainstore.(*MemSessionStore).base = basestore
 			mainstore.(*MemSessionStore).mainstore = mainstore.(Store)
@@ -403,7 +403,7 @@ func (sess *PluginSession) getPlugin(basestore Store, err error) (Store, error) 
 		}
 		store.mainstore = mainstore.(Store)
 	} else {
-		fmt.Println("[init main session]", sess.plugTag, basestore.SessionID())
+//		fmt.Println("[init main session]", sess.plugTag, basestore.SessionID())
 		store.mainstore = store
 	}
 
@@ -423,7 +423,7 @@ type Store interface {
 	Flush() (error)                         //delete all data
 
 	IsLogin() (bool)                          //current had Login?
-//	HasPermission() (bool)                    //current Has Permission?
+	IsAdmin() (bool)                          //current Has Admin Permission?
 //	GetCSRF() (string)                        //create CSRF token
 }
 
@@ -492,6 +492,14 @@ func (st *MemSessionStore) SessionRelease() {
 
 func (st *MemSessionStore) IsLogin() (bool) {
 	status, ok := st.mainstore.Get("isLogin")
+	if ok && status.(bool) {
+		return true
+	}
+	return false
+}
+
+func (st *MemSessionStore) IsAdmin() (bool) {
+	status, ok := st.mainstore.Get("isAdmin")
 	if ok && status.(bool) {
 		return true
 	}
